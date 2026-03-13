@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { BotState } from "@/lib/types";
+import { HttpMethods, type BotState, type NetworkMode } from "@/lib/types";
 
 export function useBotData() {
   const [botState, setBotState] = useState<BotState | null>(null);
@@ -25,17 +25,28 @@ export function useBotData() {
 
   const startBot = async () => {
     setActionPending(true);
-    await fetch("/api/bot/start", { method: "POST" });
+    await fetch("/api/bot/start", { method: HttpMethods.POST });
     await fetchStatus();
     setActionPending(false);
   };
 
   const stopBot = async () => {
     setActionPending(true);
-    await fetch("/api/bot/stop", { method: "POST" });
+    await fetch("/api/bot/stop", { method: HttpMethods.POST });
     await fetchStatus();
     setActionPending(false);
   };
 
-  return { botState, loading, actionPending, startBot, stopBot };
+  const setNetwork = async (network: NetworkMode) => {
+    setActionPending(true);
+    await fetch("/api/bot/mode", {
+      method: HttpMethods.POST,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ network }),
+    });
+    await fetchStatus();
+    setActionPending(false);
+  };
+
+  return { botState, loading, actionPending, startBot, stopBot, setNetwork };
 }

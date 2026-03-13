@@ -10,19 +10,29 @@ import {
 import ccxt, { bybit } from "ccxt";
 
 // ─── Инициализация биржи ──────────────────────────────────────────────────────
-// Singleton — создаём один раз и переиспользуем
+// Singleton — создаём один раз и переиспользуем.
+// Для смены режима (testnet/mainnet) вызови resetExchange(sandbox).
 
 let exchange: bybit | null = null;
+let currentSandbox: boolean = process.env.USE_TESTNET === "true";
 
 function getExchange() {
   if (!exchange) {
-    exchange = new ccxt.bybit({
-      apiKey: process.env.BYBIT_API_KEY,
-      secret: process.env.BYBIT_SECRET_KEY,
-      sandbox: process.env.USE_TESTNET === "true", // true = testnet.bybit.com
-    });
+    const apiKey = currentSandbox
+      ? process.env.BYBIT_TESTNET_API_KEY
+      : process.env.BYBIT_API_KEY;
+    const secret = currentSandbox
+      ? process.env.BYBIT_TESTNET_SECRET_KEY
+      : process.env.BYBIT_SECRET_KEY;
+    exchange = new ccxt.bybit({ apiKey, secret, sandbox: currentSandbox });
   }
   return exchange;
+}
+
+// Сбросить singleton и переключить режим — вызывается при смене testnet/mainnet
+export function resetExchange(sandbox: boolean): void {
+  exchange = null;
+  currentSandbox = sandbox;
 }
 
 // ─── Рыночные данные ──────────────────────────────────────────────────────────

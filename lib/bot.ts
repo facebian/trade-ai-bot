@@ -5,6 +5,7 @@ import {
   Position,
   ClaudeAnalysis,
   TradingPair,
+  NetworkMode,
 } from "./types";
 import {
   getMarketData,
@@ -14,6 +15,7 @@ import {
   getSentimentData,
   marketBuy,
   marketSell,
+  resetExchange,
 } from "./exchange";
 import { analyzeMarket } from "./claude";
 import { getCryptoNews } from "./news";
@@ -23,6 +25,7 @@ import { getCryptoNews } from "./news";
 
 let botState: BotState = {
   status: "stopped",
+  network: process.env.USE_TESTNET === "true" ? "testnet" : "mainnet",
   balance: 0,
   startBalance: 0,
   position: null,
@@ -71,11 +74,31 @@ export function stopBot(): void {
   botState = { ...botState, status: "stopped", lastUpdated: Date.now() };
 }
 
+// Переключить сеть (testnet ↔ mainnet) — останавливает бота и сбрасывает состояние
+export function setNetwork(network: NetworkMode): void {
+  if (botState.status === "running") stopBot();
+  resetExchange(network === "testnet");
+  botState = {
+    status: "stopped",
+    network,
+    balance: 0,
+    startBalance: 0,
+    position: null,
+    trades: [],
+    totalPnl: 0,
+    totalPnlPercent: 0,
+    winRate: 0,
+    lastAnalysis: null,
+    lastUpdated: Date.now(),
+  };
+}
+
 // ─── Основной цикл анализа ────────────────────────────────────────────────────
 // Вызывается каждые 30 секунд: собирает данные → спрашивает Claude → исполняет
 
 async function runAnalysisCycle(): Promise<void> {
-  const pair = (process.env.TRADING_PAIR || "BTC/USDT") as TradingPair;
+  const pair = (process.env.TRADING_PAIR ||
+    TradingPair.BTC_USDT) as TradingPair;
 
   try {
     // 1. Собираем все данные параллельно для скорости

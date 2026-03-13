@@ -1,6 +1,10 @@
 // ─── Базовые типы ───────────────────────────────────────────────────────────
 
-export type TradingPair = "BTC/USDT" | "ETH/USDT" | "SOL/USDT";
+export enum TradingPair {
+  BTC_USDT = "BTC/USDT",
+  ETH_USDT = "ETH/USDT",
+  SOL_USDT = "SOL/USDT",
+}
 export type Decision = "BUY" | "SELL" | "HOLD";
 export type BotStatus = "running" | "stopped" | "error";
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
@@ -127,8 +131,11 @@ export interface Position {
 
 // ─── Полное состояние бота ────────────────────────────────────────────────────
 
+export type NetworkMode = "testnet" | "mainnet";
+
 export interface BotState {
   status: BotStatus;
+  network: NetworkMode; // Текущий режим: testnet.bybit.com или mainnet
   balance: number; // Текущий баланс USDT
   startBalance: number; // Начальный баланс (для подсчёта P&L)
   position: Position | null;
@@ -160,3 +167,16 @@ export interface PricePoint {
   price: number;
   volume?: number;
 }
+
+export enum HttpMethods {
+  GET = "GET",
+  POST = "POST",
+  PUT = "PUT",
+  PATCH = "PATCH",
+  DELETE = "DELETE",
+  HEAD = "HEAD",
+  OPTIONS = "OPTIONS",
+  TRACE = "TRACE",
+  CONNECT = "CONNECT",
+}
+

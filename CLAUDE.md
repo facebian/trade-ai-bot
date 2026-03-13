@@ -52,10 +52,12 @@ This is an AI-powered crypto trading bot. Core modules in `lib/`:
 ## Environment Variables
 
 ```
-ANTHROPIC_API_KEY       # Required — Claude API key
-BYBIT_API_KEY           # Required — Bybit API key
-BYBIT_SECRET_KEY        # Required — Bybit secret key
-USE_TESTNET=true        # Use Bybit testnet (sandbox mode)
+ANTHROPIC_API_KEY            # Required — Claude API key
+BYBIT_API_KEY                # Required — Bybit mainnet API key (api.bybit.com)
+BYBIT_SECRET_KEY             # Required — Bybit mainnet secret key
+BYBIT_TESTNET_API_KEY        # Required — Bybit testnet API key (testnet.bybit.com)
+BYBIT_TESTNET_SECRET_KEY     # Required — Bybit testnet secret key
+USE_TESTNET=true             # Initial mode: true = testnet, false = mainnet
 TRADING_PAIR=BTC/USDT   # Trading pair (default: BTC/USDT)
 POSITION_SIZE=100       # Position size in USDT (default: 100)
 CRYPTOCOMPARE_API_KEY   # Optional — up to 100k req/month free
