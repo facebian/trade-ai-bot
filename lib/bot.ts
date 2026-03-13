@@ -2,10 +2,8 @@ import { v4 as uuid } from "uuid";
 import {
   BotState,
   Trade,
-  Position,
   ClaudeAnalysis,
   TradingPair,
-  NetworkMode,
 } from "./types";
 import {
   getMarketData,
@@ -15,7 +13,6 @@ import {
   getSentimentData,
   marketBuy,
   marketSell,
-  resetExchange,
 } from "./exchange";
 import { analyzeMarket } from "./claude";
 import { getCryptoNews } from "./news";
@@ -33,7 +30,6 @@ const gb = globalThis as typeof globalThis & {
 if (!gb._botState) {
   gb._botState = {
     status: "stopped",
-    network: process.env.USE_TESTNET === "true" ? "testnet" : "mainnet",
     balance: 0,
     startBalance: 0,
     position: null,
@@ -58,9 +54,13 @@ export function getBotState(): BotState {
 // Синхронизировать баланс с биржей — вызывается из /api/bot/status каждые 5с
 // Работает только когда бот остановлен, чтобы не дублировать запросы во время работы
 export async function syncBalance(): Promise<void> {
+  console.log('gb._botState.status : >>>', gb._botState.status);
+  
   if (gb._botState.status === "running") return;
   try {
     const balance = await getBalance();
+    console.log('balance : >>>', balance);
+    
     gb._botState = { ...gb._botState, balance, lastError: null };
   } catch (error) {
     console.error("[syncBalance]", error);
@@ -106,26 +106,6 @@ export function stopBot(): void {
     gb._botInterval = null;
   }
   gb._botState = { ...gb._botState, status: "stopped", lastUpdated: Date.now() };
-}
-
-// Переключить сеть (testnet ↔ mainnet) — останавливает бота и сбрасывает состояние
-export function setNetwork(network: NetworkMode): void {
-  if (gb._botState.status === "running") stopBot();
-  resetExchange(network === "testnet");
-  gb._botState = {
-    status: "stopped",
-    network,
-    balance: 0,
-    startBalance: 0,
-    position: null,
-    trades: [],
-    totalPnl: 0,
-    totalPnlPercent: 0,
-    winRate: 0,
-    lastAnalysis: null,
-    lastError: null,
-    lastUpdated: Date.now(),
-  };
 }
 
 // ─── Основной цикл анализа ────────────────────────────────────────────────────

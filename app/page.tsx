@@ -6,13 +6,12 @@ import { StatsRow } from "@/components/StatsRow";
 import { PriceChart } from "@/components/PriceChart";
 import { AIPanel } from "@/components/AIPanel";
 import { TradeHistory } from "@/components/TradeHistory";
-import { NetworkBadge } from "@/components/NetworkBadge";
 import { IconActivity } from "@tabler/icons-react";
 import { TradingPair } from "@/lib/types";
 import { useCurrencyRates } from "@/hooks/useCurrencyRates";
 
 export default function Home() {
-  const { botState, loading, actionPending, startBot, stopBot, setNetwork } =
+  const { botState, loading, actionPending, startBot, stopBot } =
     useBotData();
   const priceData = usePriceData();
   const rates = useCurrencyRates();
@@ -56,11 +55,6 @@ export default function Home() {
             </span>
           </div>
           <div className='flex items-center gap-3'>
-            <NetworkBadge
-              network={botState.network}
-              onSwitch={setNetwork}
-              disabled={actionPending}
-            />
             <p className='text-[11px] text-muted-foreground font-mono hidden sm:block'>
               Updated {lastUpdated}
             </p>
