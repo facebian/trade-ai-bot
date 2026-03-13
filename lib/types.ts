@@ -144,6 +144,7 @@ export interface BotState {
   totalPnlPercent: number;
   winRate: number; // Процент прибыльных сделок
   lastAnalysis: ClaudeAnalysis | null;
+  lastError: string | null; // Последняя ошибка цикла (сбрасывается при успехе)
   lastUpdated: number;
 }
 

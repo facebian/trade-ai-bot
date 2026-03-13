@@ -9,11 +9,16 @@ import { TradeHistory } from "@/components/TradeHistory";
 import { NetworkBadge } from "@/components/NetworkBadge";
 import { IconActivity } from "@tabler/icons-react";
 import { TradingPair } from "@/lib/types";
+import { useCurrencyRates } from "@/hooks/useCurrencyRates";
 
 export default function Home() {
   const { botState, loading, actionPending, startBot, stopBot, setNetwork } =
     useBotData();
   const priceData = usePriceData();
+  const rates = useCurrencyRates();
+
+  console.log('botState : >>', botState);
+  
 
   if (loading) {
     return (
@@ -68,6 +73,7 @@ export default function Home() {
         <StatsRow
           botState={botState}
           marketData={priceData?.marketData ?? null}
+          rates={rates}
         />
 
         <PriceChart

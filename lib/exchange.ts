@@ -10,36 +10,60 @@ import {
 import ccxt, { bybit } from "ccxt";
 
 // ─── Инициализация биржи ──────────────────────────────────────────────────────
-// Singleton — создаём один раз и переиспользуем.
-// Для смены режима (testnet/mainnet) вызови resetExchange(sandbox).
+// Два singleton-а:
+//   publicExchange  — без ключей, только публичные эндпоинты (тикер, свечи)
+//   exchange        — с ключами, для приватных эндпоинтов (баланс, ордера)
+// Для смены режима вызови resetExchange(sandbox).
 
-let exchange: bybit | null = null;
-let currentSandbox: boolean = process.env.USE_TESTNET === "true";
+// Store singletons on globalThis so they are shared across all Next.js route
+// handler module instances (each route gets its own module scope in App Router).
+const g = globalThis as typeof globalThis & {
+  _exchange: bybit | null;
+  _publicExchange: bybit | null;
+  _currentSandbox: boolean;
+};
+if (g._exchange === undefined) g._exchange = null;
+if (g._publicExchange === undefined) g._publicExchange = null;
+if (g._currentSandbox === undefined)
+  g._currentSandbox = process.env.USE_TESTNET === "true";
 
-function getExchange() {
-  if (!exchange) {
-    const apiKey = currentSandbox
-      ? process.env.BYBIT_TESTNET_API_KEY
-      : process.env.BYBIT_API_KEY;
-    const secret = currentSandbox
-      ? process.env.BYBIT_TESTNET_SECRET_KEY
-      : process.env.BYBIT_SECRET_KEY;
-    exchange = new ccxt.bybit({ apiKey, secret, sandbox: currentSandbox });
+// Публичный инстанс — без API-ключей, подходит для любого режима
+function getPublicExchange(): bybit {
+  if (!g._publicExchange) {
+    g._publicExchange = new ccxt.bybit({ sandbox: g._currentSandbox });
   }
-  return exchange;
+  return g._publicExchange;
 }
 
-// Сбросить singleton и переключить режим — вызывается при смене testnet/mainnet
+// Приватный инстанс — с ключами, только для аутентифицированных запросов
+function getExchange(): bybit {
+  console.log('!g._exchange : >>>', !g._exchange);
+  
+  if (!g._exchange) {
+    const apiKey = g._currentSandbox
+      ? process.env.BYBIT_TESTNET_API_KEY
+      : process.env.BYBIT_API_KEY;
+    const secret = g._currentSandbox
+      ? process.env.BYBIT_TESTNET_SECRET_KEY
+      : process.env.BYBIT_SECRET_KEY;
+    g._exchange = new ccxt.bybit({ apiKey, secret, sandbox: g._currentSandbox, options: { defaultType: "unified" } });
+  }
+
+  return g._exchange;
+}
+
+// Сбросить оба singleton-а и переключить режим — вызывается при смене testnet/mainnet
 export function resetExchange(sandbox: boolean): void {
-  exchange = null;
-  currentSandbox = sandbox;
+  g._exchange = null;
+  g._publicExchange = null;
+  g._currentSandbox = sandbox;
 }
 
 // ─── Рыночные данные ──────────────────────────────────────────────────────────
 
 // Получить текущую цену и статистику за 24 часа
 export async function getMarketData(symbol: string): Promise<MarketData> {
-  const ex = getExchange();
+  const ex = getPublicExchange();
   const [ticker, candles1h] = await Promise.all([
     ex.fetchTicker(symbol),
     ex.fetchOHLCV(symbol, "1h", undefined, 2),
@@ -68,7 +92,7 @@ export async function getOHLCV(
   symbol: string,
   limit = 200,
 ): Promise<PricePoint[]> {
-  const ex = getExchange();
+  const ex = getPublicExchange();
   const ohlcv = await ex.fetchOHLCV(symbol, "15m", undefined, limit);
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   //@ts-ignore
@@ -84,7 +108,7 @@ export async function getOHLCV(
 // Получить свободный баланс USDT
 export async function getBalance(): Promise<number> {
   const ex = getExchange();
-  const balance = await ex.fetchBalance();
+  const balance = await ex.fetchBalance({ type: "unified" });
   return balance.USDT?.free ?? 0;
 }
 

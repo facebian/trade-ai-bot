@@ -21,64 +21,98 @@ import { analyzeMarket } from "./claude";
 import { getCryptoNews } from "./news";
 
 // ─── Состояние бота ───────────────────────────────────────────────────────────
-// Хранится в памяти сервера. В продакшене замени на Redis или PostgreSQL.
+// Хранится на globalThis, чтобы быть общим для всех модульных инстансов
+// Next.js App Router (каждый route handler получает свой скоуп модуля).
+// В продакшене замени на Redis или PostgreSQL.
 
-let botState: BotState = {
-  status: "stopped",
-  network: process.env.USE_TESTNET === "true" ? "testnet" : "mainnet",
-  balance: 0,
-  startBalance: 0,
-  position: null,
-  trades: [],
-  totalPnl: 0,
-  totalPnlPercent: 0,
-  winRate: 0,
-  lastAnalysis: null,
-  lastUpdated: Date.now(),
+const gb = globalThis as typeof globalThis & {
+  _botState: BotState;
+  _botInterval: ReturnType<typeof setInterval> | null;
 };
 
-let botInterval: ReturnType<typeof setInterval> | null = null;
+if (!gb._botState) {
+  gb._botState = {
+    status: "stopped",
+    network: process.env.USE_TESTNET === "true" ? "testnet" : "mainnet",
+    balance: 0,
+    startBalance: 0,
+    position: null,
+    trades: [],
+    totalPnl: 0,
+    totalPnlPercent: 0,
+    winRate: 0,
+    lastAnalysis: null,
+    lastError: null,
+    lastUpdated: Date.now(),
+  };
+}
+if (gb._botInterval === undefined) gb._botInterval = null;
 
 // ─── Публичные функции управления ────────────────────────────────────────────
 
 // Получить текущее состояние бота (используется в API роутах)
 export function getBotState(): BotState {
-  return { ...botState };
+  return { ...gb._botState };
+}
+
+// Синхронизировать баланс с биржей — вызывается из /api/bot/status каждые 5с
+// Работает только когда бот остановлен, чтобы не дублировать запросы во время работы
+export async function syncBalance(): Promise<void> {
+  if (gb._botState.status === "running") return;
+  try {
+    const balance = await getBalance();
+    gb._botState = { ...gb._botState, balance, lastError: null };
+  } catch (error) {
+    console.error("[syncBalance]", error);
+    gb._botState = { ...gb._botState, lastError: `Balance fetch failed: ${String(error)}` };
+  }
 }
 
 // Запустить бота — получаем баланс и запускаем цикл анализа
 export async function startBot(): Promise<void> {
-  if (botState.status === "running") return;
+  if (gb._botState.status === "running") return;
 
-  const balance = await getBalance();
+  let balance: number;
+  try {
+    balance = await getBalance();
+  } catch (error) {
+    gb._botState = {
+      ...gb._botState,
+      status: "error",
+      lastError: `Failed to fetch balance: ${String(error)}`,
+      lastUpdated: Date.now(),
+    };
+    throw error;
+  }
 
-  botState = {
-    ...botState,
+  gb._botState = {
+    ...gb._botState,
     status: "running",
     balance,
     startBalance: balance,
+    lastError: null,
     lastUpdated: Date.now(),
   };
 
   // Первый анализ сразу, затем каждые 30 секунд
   await runAnalysisCycle();
-  botInterval = setInterval(runAnalysisCycle, 30_000);
+  gb._botInterval = setInterval(runAnalysisCycle, 30_000);
 }
 
 // Остановить бота
 export function stopBot(): void {
-  if (botInterval) {
-    clearInterval(botInterval);
-    botInterval = null;
+  if (gb._botInterval) {
+    clearInterval(gb._botInterval);
+    gb._botInterval = null;
   }
-  botState = { ...botState, status: "stopped", lastUpdated: Date.now() };
+  gb._botState = { ...gb._botState, status: "stopped", lastUpdated: Date.now() };
 }
 
 // Переключить сеть (testnet ↔ mainnet) — останавливает бота и сбрасывает состояние
 export function setNetwork(network: NetworkMode): void {
-  if (botState.status === "running") stopBot();
+  if (gb._botState.status === "running") stopBot();
   resetExchange(network === "testnet");
-  botState = {
+  gb._botState = {
     status: "stopped",
     network,
     balance: 0,
@@ -89,6 +123,7 @@ export function setNetwork(network: NetworkMode): void {
     totalPnlPercent: 0,
     winRate: 0,
     lastAnalysis: null,
+    lastError: null,
     lastUpdated: Date.now(),
   };
 }
@@ -113,16 +148,16 @@ async function runAnalysisCycle(): Promise<void> {
     const indicators = calculateIndicators(candles);
 
     // 3. Обновляем P&L открытой позиции по текущей цене
-    if (botState.position) {
+    if (gb._botState.position) {
       const pnl =
-        (marketData.price - botState.position.entryPrice) *
-        botState.position.amount;
+        (marketData.price - gb._botState.position.entryPrice) *
+        gb._botState.position.amount;
       const pnlPercent =
-        ((marketData.price - botState.position.entryPrice) /
-          botState.position.entryPrice) *
+        ((marketData.price - gb._botState.position.entryPrice) /
+          gb._botState.position.entryPrice) *
         100;
-      botState.position = {
-        ...botState.position,
+      gb._botState.position = {
+        ...gb._botState.position,
         currentPrice: marketData.price,
         pnl,
         pnlPercent,
@@ -135,13 +170,13 @@ async function runAnalysisCycle(): Promise<void> {
       indicators,
       sentiment,
       news,
-      position: botState.position,
-      recentTrades: botState.trades.slice(0, 5),
-      balance: botState.balance,
+      position: gb._botState.position,
+      recentTrades: gb._botState.trades.slice(0, 5),
+      balance: gb._botState.balance,
       pair,
     });
 
-    botState.lastAnalysis = analysis;
+    gb._botState.lastAnalysis = analysis;
 
     // 5. Исполняем решение Claude на бирже
     await executeDecision(analysis, marketData.price, pair);
@@ -149,10 +184,13 @@ async function runAnalysisCycle(): Promise<void> {
     // 6. Пересчитываем статистику
     updateStats();
 
-    botState.lastUpdated = Date.now();
+    gb._botState.lastError = null;
+    gb._botState.lastUpdated = Date.now();
   } catch (error) {
     console.error("Bot cycle error:", error);
-    botState.status = "error";
+    gb._botState.status = "error";
+    gb._botState.lastError = String(error);
+    gb._botState.lastUpdated = Date.now();
   }
 }
 
@@ -168,8 +206,8 @@ async function executeDecision(
   // BUY — открываем позицию если нет активной и хватает баланса
   if (
     analysis.decision === "BUY" &&
-    !botState.position &&
-    botState.balance >= positionSize
+    !gb._botState.position &&
+    gb._botState.balance >= positionSize
   ) {
     await marketBuy(pair, positionSize);
 
@@ -188,7 +226,7 @@ async function executeDecision(
       timestamp: Date.now(),
     };
 
-    botState.position = {
+    gb._botState.position = {
       pair,
       amount,
       entryPrice: currentPrice,
@@ -200,13 +238,13 @@ async function executeDecision(
       takeProfit: analysis.takeProfit,
     };
 
-    botState.balance -= positionSize;
-    botState.trades = [trade, ...botState.trades];
+    gb._botState.balance -= positionSize;
+    gb._botState.trades = [trade, ...gb._botState.trades];
   }
 
   // SELL — закрываем позицию если она есть
-  else if (analysis.decision === "SELL" && botState.position) {
-    const { amount, entryPrice } = botState.position;
+  else if (analysis.decision === "SELL" && gb._botState.position) {
+    const { amount, entryPrice } = gb._botState.position;
     await marketSell(pair, amount);
 
     const proceeds = amount * currentPrice;
@@ -226,9 +264,9 @@ async function executeDecision(
       timestamp: Date.now(),
     };
 
-    botState.balance += proceeds;
-    botState.position = null;
-    botState.trades = [trade, ...botState.trades];
+    gb._botState.balance += proceeds;
+    gb._botState.position = null;
+    gb._botState.trades = [trade, ...gb._botState.trades];
   }
 
   // HOLD — ничего не делаем, просто логируем решение
@@ -239,20 +277,23 @@ async function executeDecision(
 function updateStats(): void {
   // Общая стоимость = баланс + стоимость открытой позиции
   const totalValue =
-    botState.balance +
-    (botState.position
-      ? botState.position.amount * botState.position.currentPrice
+    gb._botState.balance +
+    (gb._botState.position
+      ? gb._botState.position.amount * gb._botState.position.currentPrice
       : 0);
 
-  botState.totalPnl = totalValue - botState.startBalance;
-  botState.totalPnlPercent = (botState.totalPnl / botState.startBalance) * 100;
+  gb._botState.totalPnl = totalValue - gb._botState.startBalance;
+  gb._botState.totalPnlPercent =
+    gb._botState.startBalance > 0
+      ? (gb._botState.totalPnl / gb._botState.startBalance) * 100
+      : 0;
 
   // Win rate — считаем только по закрытым сделкам SELL
-  const closedTrades = botState.trades.filter(
-    (t) => t.type === "SELL" && t.pnl !== null,
+  const closedTrades = gb._botState.trades.filter(
+    (t: Trade) => t.type === "SELL" && t.pnl !== null,
   );
-  const winningTrades = closedTrades.filter((t) => (t.pnl ?? 0) > 0);
-  botState.winRate =
+  const winningTrades = closedTrades.filter((t: Trade) => (t.pnl ?? 0) > 0);
+  gb._botState.winRate =
     closedTrades.length > 0
       ? (winningTrades.length / closedTrades.length) * 100
       : 0;
