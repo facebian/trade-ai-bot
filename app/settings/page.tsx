@@ -3,7 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { getConfig, saveConfig, type BotConfig } from "@/app/actions/config";
+import { saveConfig, type BotConfig } from "@/app/actions/config";
+import { useConfig } from "@/hooks/useConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,18 +51,17 @@ const DEFAULTS: Omit<FormState, "id"> = {
 };
 
 export default function SettingsPage() {
+  const { config, configLoading, mutateConfig } = useConfig();
   const [form, setForm] = useState<FormState | null>(null);
-  const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
 
+  // Sync form when SWR loads/refreshes config
   useEffect(() => {
-    getConfig().then((data) => {
-      if (data) {
-        setForm({ ...DEFAULTS, ...data, id: data.id as string });
-      }
-      setLoading(false);
-    });
-  }, []);
+    if (config && !form) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setForm({ ...DEFAULTS, ...config, id: config.id as string });
+    }
+  }, [config, form]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => prev && { ...prev, [key]: value });
@@ -71,11 +71,12 @@ export default function SettingsPage() {
     if (!form) return;
     startTransition(async () => {
       await saveConfig(form);
+      await mutateConfig(); // обновить SWR кеш после сохранения
       toast.success("Config saved");
     });
   };
 
-  if (loading || !form) {
+  if (configLoading || !form) {
     return (
       <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
         <p className="text-muted-foreground text-sm font-mono animate-pulse">Loading config...</p>

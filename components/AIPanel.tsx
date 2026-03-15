@@ -57,7 +57,6 @@ function PositionCard({
 }) {
   const pnlPositive = position.pnl >= 0;
   const pnlSign = pnlPositive ? "+" : "";
-  console.log("position : >>", position);
 
   return (
     <div className='rounded-lg border border-trade/30 bg-trade/5 p-3'>
@@ -198,7 +197,6 @@ export function AIPanel({
   const isError = botState.status === "error";
   const isStopped = botState.status === "stopped";
 
-  console.log("isError : >>", isError);
   console.log("botState.status : >>", botState);
 
   const statusDotClass = isRunning

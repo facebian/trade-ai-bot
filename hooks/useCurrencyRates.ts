@@ -27,8 +27,7 @@ export function useCurrencyRates(): CurrencyRates | null {
       try {
         const res = await fetch(RATES_URL);
         const data = await res.json();
-        console.log('data : >>>', data);
-        
+
         const r: CurrencyRates = {
           EUR: data.rates?.EUR ?? 0.92,
           PLN: data.rates?.PLN ?? 4.0,
