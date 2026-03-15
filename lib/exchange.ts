@@ -93,14 +93,14 @@ export async function getOHLCV(
 // Получить свободный баланс USDT
 export async function getBalance(): Promise<number> {
   const ex = getExchange();
-  const balance = await ex.fetchBalance();
+  const balance = await ex.fetchBalance({ type: "unified" });
   return balance.USDC?.free ?? 0;
 }
 
 // Получить свободный баланс конкретного токена (например "BTC")
 export async function getTokenBalance(token: string): Promise<number> {
   const ex = getExchange();
-  const balance = await ex.fetchBalance();
+  const balance = await ex.fetchBalance({ type: "unified" });
   return balance[token]?.free ?? 0;
 }
 
