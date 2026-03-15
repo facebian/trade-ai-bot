@@ -40,6 +40,9 @@ function getExchange(): bybit {
       secret: process.env.BYBIT_SECRET_KEY,
       options: { defaultType: "unified" },
     });
+    // Disable currency auto-fetching — Bybit's /v5/asset/coin/query-info
+    // is geo-blocked by CloudFront in some regions
+    g._exchange.has["fetchCurrencies"] = false;
   }
   return g._exchange;
 }
@@ -106,7 +109,10 @@ export async function getTokenBalance(token: string): Promise<number> {
 
 // Купить по рыночной цене на указанную сумму в USDT
 // Возвращает фактически купленное количество (с учётом комиссии)
-export async function marketBuy(symbol: string, usdсAmount: number): Promise<number> {
+export async function marketBuy(
+  symbol: string,
+  usdсAmount: number,
+): Promise<number> {
   const ex = getExchange();
   const order = await ex.createMarketBuyOrderWithCost(symbol, usdсAmount);
   // order.filled — фактически исполненное количество base currency (BTC)
