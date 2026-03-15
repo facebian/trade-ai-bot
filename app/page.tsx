@@ -9,15 +9,13 @@ import { TradeHistory } from "@/components/TradeHistory";
 import { IconActivity } from "@tabler/icons-react";
 import { TradingPair } from "@/lib/types";
 import { useCurrencyRates } from "@/hooks/useCurrencyRates";
+import { cn } from "@/lib/utils";
 
 export default function Home() {
-  const { botState, loading, actionPending, startBot, stopBot } =
+  const { botState, loading, actionPending, startBot, stopBot, closePosition } =
     useBotData();
   const priceData = usePriceData();
   const rates = useCurrencyRates();
-
-  console.log('botState : >>', botState);
-  
 
   if (loading) {
     return (
@@ -55,6 +53,17 @@ export default function Home() {
             </span>
           </div>
           <div className='flex items-center gap-3'>
+            <div
+              title={botState.lastError ?? `Status: ${botState.status}`}
+              className={cn(
+                "w-2 h-2 rounded-full transition-colors",
+                botState.lastError
+                  ? "bg-sell shadow-[0_0_6px_#ff4466]"
+                  : botState.status === "running"
+                    ? "bg-buy shadow-[0_0_6px_#00ff88] animate-pulse"
+                    : "bg-zinc-400",
+              )}
+            />
             <p className='text-[11px] text-muted-foreground font-mono hidden sm:block'>
               Updated {lastUpdated}
             </p>
@@ -80,6 +89,7 @@ export default function Home() {
             botState={botState}
             onStart={startBot}
             onStop={stopBot}
+            onClosePosition={closePosition}
             actionPending={actionPending}
           />
           <TradeHistory trades={botState.trades} />

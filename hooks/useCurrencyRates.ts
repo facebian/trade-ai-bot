@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 export interface CurrencyRates {
   EUR: number; // 1 USD → EUR
   PLN: number; // 1 USD → PLN
+  USD: number; // 1 USD → USDC (примерно 1, может быть чуть меньше из-за комиссий)
 }
 
 // Открытый API без ключа, обновляется раз в сутки
@@ -26,16 +27,19 @@ export function useCurrencyRates(): CurrencyRates | null {
       try {
         const res = await fetch(RATES_URL);
         const data = await res.json();
+        console.log('data : >>>', data);
+        
         const r: CurrencyRates = {
           EUR: data.rates?.EUR ?? 0.92,
           PLN: data.rates?.PLN ?? 4.0,
+          USD: 1.0, // USDC обычно почти 1 к 1 с USD, но может быть чуть меньше из-за комиссий
         };
         cachedRates = r;
         cachedAt = Date.now();
         setRates(r);
       } catch {
         // Fallback to approximate rates if API is unavailable
-        setRates({ EUR: 0.92, PLN: 4.0 });
+        setRates({ EUR: 0.92, PLN: 4.0, USD: 1.0 });
       }
     };
     load();

@@ -32,7 +32,7 @@ function getPublicExchange(): bybit {
   return g._publicExchange;
 }
 
-// Приватный инстанс — с ключами
+// Приватный инстанс — с ключами (mainnet)
 function getExchange(): bybit {
   if (!g._exchange) {
     g._exchange = new ccxt.bybit({
@@ -78,7 +78,7 @@ export async function getOHLCV(
   limit = 200,
 ): Promise<PricePoint[]> {
   const ex = getPublicExchange();
-  const ohlcv = await ex.fetchOHLCV(symbol, "15m", undefined, limit);
+  const ohlcv = await ex.fetchOHLCV(symbol, "5m", undefined, limit);
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   //@ts-ignore
   return ohlcv.map(([time, , , , close, volume]) => ({
@@ -94,18 +94,23 @@ export async function getOHLCV(
 export async function getBalance(): Promise<number> {
   const ex = getExchange();
   const balance = await ex.fetchBalance();
-  console.log('balance : >>>', balance);
-  
   return balance.USDC?.free ?? 0;
 }
 
-// Купить по рыночной цене на указанную сумму в USDT
-export async function marketBuy(symbol: string, usdtAmount: number) {
+// Получить свободный баланс конкретного токена (например "BTC")
+export async function getTokenBalance(token: string): Promise<number> {
   const ex = getExchange();
-  const ticker = await ex.fetchTicker(symbol);
-  const price = ticker.last ?? 0;
-  const amount = usdtAmount / price;
-  return await ex.createMarketBuyOrder(symbol, amount);
+  const balance = await ex.fetchBalance();
+  return balance[token]?.free ?? 0;
+}
+
+// Купить по рыночной цене на указанную сумму в USDT
+// Возвращает фактически купленное количество (с учётом комиссии)
+export async function marketBuy(symbol: string, usdсAmount: number): Promise<number> {
+  const ex = getExchange();
+  const order = await ex.createMarketBuyOrderWithCost(symbol, usdсAmount);
+  // order.filled — фактически исполненное количество base currency (BTC)
+  return order.filled ?? order.amount ?? 0;
 }
 
 // Продать по рыночной цене указанное количество монет

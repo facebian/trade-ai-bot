@@ -28,12 +28,12 @@ function StatCard({
   valueColor?: string;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 flex gap-3 items-start">
-      <div className="p-2 rounded-lg bg-muted text-muted-foreground shrink-0">
+    <div className='rounded-xl border border-border bg-card p-4 flex gap-3 items-start'>
+      <div className='p-2 rounded-lg bg-muted text-muted-foreground shrink-0'>
         {icon}
       </div>
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+      <div className='min-w-0'>
+        <p className='text-[11px] font-medium text-muted-foreground uppercase tracking-wider'>
           {label}
         </p>
         <p
@@ -45,7 +45,10 @@ function StatCard({
           {value}
         </p>
         {subValues?.map((s, i) => (
-          <p key={i} className="text-[11px] text-muted-foreground font-mono mt-0.5">
+          <p
+            key={i}
+            className='text-[11px] text-muted-foreground font-mono mt-0.5'
+          >
             {s}
           </p>
         ))}
@@ -70,19 +73,21 @@ export function StatsRow({ botState, marketData, rates }: StatsRowProps) {
   const balancePln = rates ? botState.balance * rates.PLN : null;
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className='grid grid-cols-2 lg:grid-cols-4 gap-3'>
       <StatCard
         icon={<IconWallet size={18} />}
-        label="Balance"
+        label='Balance'
         value={`$${fmt(botState.balance)}`}
         subValues={[
           `Start $${fmt(botState.startBalance)}`,
-          ...(balanceEur != null ? [`€${fmt(balanceEur)}  zł${fmt(balancePln!)}`] : []),
+          ...(balanceEur != null
+            ? [`EUR €${fmt(balanceEur)}  PLN zł${fmt(balancePln!)}`]
+            : []),
         ]}
       />
       <StatCard
         icon={<IconCurrencyBitcoin size={18} />}
-        label="BTC / USDC"
+        label='BTC / USDC'
         value={
           marketData
             ? `$${marketData.price.toLocaleString("en-US", { minimumFractionDigits: 0 })}`
@@ -103,13 +108,13 @@ export function StatsRow({ botState, marketData, rates }: StatsRowProps) {
       />
       <StatCard
         icon={<IconChartBar size={18} />}
-        label="Trades"
+        label='Trades'
         value={String(botState.trades.length)}
         subValues={[`Win rate ${botState.winRate.toFixed(0)}%`]}
       />
       <StatCard
         icon={<IconTrendingUp size={18} />}
-        label="Total P&L"
+        label='Total P&L'
         value={`${pnlSign}$${fmt(botState.totalPnl)}`}
         subValues={[`${pnlSign}${botState.totalPnlPercent.toFixed(2)}%`]}
         valueColor={pnlPositive ? "text-[#00ff88]" : "text-[#ff4466]"}

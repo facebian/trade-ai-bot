@@ -10,12 +10,14 @@ import {
   getOHLCV,
   calculateIndicators,
   getBalance,
+  getTokenBalance,
   getSentimentData,
   marketBuy,
   marketSell,
 } from "./exchange";
 import { analyzeMarket } from "./claude";
 import { getCryptoNews } from "./news";
+import { logTrade } from "./logger";
 
 // ─── Состояние бота ───────────────────────────────────────────────────────────
 // Хранится на globalThis, чтобы быть общим для всех модульных инстансов
@@ -54,12 +56,9 @@ export function getBotState(): BotState {
 // Синхронизировать баланс с биржей — вызывается из /api/bot/status каждые 5с
 // Работает только когда бот остановлен, чтобы не дублировать запросы во время работы
 export async function syncBalance(): Promise<void> {
-  console.log('gb._botState.status : >>>', gb._botState.status);
-  
   if (gb._botState.status === "running") return;
   try {
     const balance = await getBalance();
-    console.log('balance : >>>', balance);
     
     gb._botState = { ...gb._botState, balance, lastError: null };
   } catch (error) {
@@ -96,7 +95,7 @@ export async function startBot(): Promise<void> {
 
   // Первый анализ сразу, затем каждые 30 секунд
   await runAnalysisCycle();
-  gb._botInterval = setInterval(runAnalysisCycle, 30_000);
+  gb._botInterval = setInterval(runAnalysisCycle, 5 * 60_000);
 }
 
 // Остановить бота
@@ -106,6 +105,44 @@ export function stopBot(): void {
     gb._botInterval = null;
   }
   gb._botState = { ...gb._botState, status: "stopped", lastUpdated: Date.now() };
+}
+
+// Принудительно закрыть текущую позицию по рыночной цене
+export async function closePosition(): Promise<void> {
+  const position = gb._botState.position;
+  if (!position) return;
+
+  const pair = position.pair as TradingPair;
+  const baseToken = pair.split("/")[0]; // "BTC" из "BTC/USDC"
+  const actualAmount = await getTokenBalance(baseToken);
+  const sellAmount = actualAmount > 0 ? actualAmount : position.amount;
+  await marketSell(pair, sellAmount);
+
+  const currentPrice = position.currentPrice;
+  const proceeds = position.amount * currentPrice;
+  const pnl = proceeds - position.amount * position.entryPrice;
+  const pnlPercent = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
+
+  const trade: Trade = {
+    id: uuid(),
+    type: "SELL",
+    pair,
+    price: currentPrice,
+    amount: position.amount,
+    total: proceeds,
+    pnl,
+    pnlPercent,
+    reasoning: "Manual close by user",
+    timestamp: Date.now(),
+  };
+
+  gb._botState.balance += proceeds;
+  gb._botState.position = null;
+  gb._botState.trades = [trade, ...gb._botState.trades];
+
+  logTrade({ type: "SELL", pair, price: currentPrice, amount: position.amount, total: proceeds, pnl, pnlPercent, reasoning: "Manual close by user" });
+  updateStats();
+  gb._botState.lastUpdated = Date.now();
 }
 
 // ─── Основной цикл анализа ────────────────────────────────────────────────────
@@ -181,7 +218,7 @@ async function executeDecision(
   currentPrice: number,
   pair: TradingPair,
 ): Promise<void> {
-  const positionSize = Number(process.env.POSITION_SIZE) || 100; // USDT
+  const positionSize = Number(process.env.POSITION_SIZE) || 5; // USDT
 
   // BUY — открываем позицию если нет активной и хватает баланса
   if (
@@ -189,9 +226,8 @@ async function executeDecision(
     !gb._botState.position &&
     gb._botState.balance >= positionSize
   ) {
-    await marketBuy(pair, positionSize);
-
-    const amount = positionSize / currentPrice;
+    // Используем фактически купленное количество из ответа биржи (с учётом комиссии)
+    const amount = await marketBuy(pair, positionSize);
 
     const trade: Trade = {
       id: uuid(),
@@ -220,6 +256,8 @@ async function executeDecision(
 
     gb._botState.balance -= positionSize;
     gb._botState.trades = [trade, ...gb._botState.trades];
+
+    logTrade({ type: "BUY", pair, price: currentPrice, amount, total: positionSize, reasoning: analysis.reasoning });
   }
 
   // SELL — закрываем позицию если она есть
@@ -247,6 +285,8 @@ async function executeDecision(
     gb._botState.balance += proceeds;
     gb._botState.position = null;
     gb._botState.trades = [trade, ...gb._botState.trades];
+
+    logTrade({ type: "SELL", pair, price: currentPrice, amount, total: proceeds, pnl, pnlPercent, reasoning: analysis.reasoning });
   }
 
   // HOLD — ничего не делаем, просто логируем решение

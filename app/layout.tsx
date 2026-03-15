@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Syne, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { Toaster } from "sonner";
 
 const syne = Syne({ subsets: ["latin"], variable: "--font-sans" });
 const spaceMono = Space_Mono({
@@ -20,7 +21,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={cn(syne.variable, spaceMono.variable)}>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {children}
+        <Toaster position="bottom-right" richColors theme="dark" />
+      </body>
     </html>
   );
 }
