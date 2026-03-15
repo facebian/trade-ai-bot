@@ -1,10 +1,6 @@
 import { v4 as uuid } from "uuid";
-import {
-  BotState,
-  Trade,
-  ClaudeAnalysis,
-  TradingPair,
-} from "./types";
+import { BotState, Trade, ClaudeAnalysis, TradingPair } from "./types";
+import { supabase } from "./supabase";
 import {
   getMarketData,
   getOHLCV,
@@ -59,11 +55,14 @@ export async function syncBalance(): Promise<void> {
   if (gb._botState.status === "running") return;
   try {
     const balance = await getBalance();
-    
+
     gb._botState = { ...gb._botState, balance, lastError: null };
   } catch (error) {
     console.error("[syncBalance]", error);
-    gb._botState = { ...gb._botState, lastError: `Balance fetch failed: ${String(error)}` };
+    gb._botState = {
+      ...gb._botState,
+      lastError: `Balance fetch failed: ${String(error)}`,
+    };
   }
 }
 
@@ -93,9 +92,19 @@ export async function startBot(): Promise<void> {
     lastUpdated: Date.now(),
   };
 
-  // Первый анализ сразу, затем каждые 30 секунд
+  const ANALYSIS_INTERVAL_MIN = 5;
+
+  // Читаем интервал анализа из конфига БД, fallback — 5 минут
+  const { data: config } = await supabase
+    .from("bot_config")
+    .select("analysis_interval_min")
+    .single();
+  const intervalMs =
+    (config?.analysis_interval_min ?? ANALYSIS_INTERVAL_MIN) * 60_000;
+
+  // Первый анализ сразу, затем по интервалу из конфига
   await runAnalysisCycle();
-  gb._botInterval = setInterval(runAnalysisCycle, 5 * 60_000);
+  gb._botInterval = setInterval(runAnalysisCycle, intervalMs);
 }
 
 // Остановить бота
@@ -104,7 +113,11 @@ export function stopBot(): void {
     clearInterval(gb._botInterval);
     gb._botInterval = null;
   }
-  gb._botState = { ...gb._botState, status: "stopped", lastUpdated: Date.now() };
+  gb._botState = {
+    ...gb._botState,
+    status: "stopped",
+    lastUpdated: Date.now(),
+  };
 }
 
 // Принудительно закрыть текущую позицию по рыночной цене
@@ -121,7 +134,8 @@ export async function closePosition(): Promise<void> {
   const currentPrice = position.currentPrice;
   const proceeds = position.amount * currentPrice;
   const pnl = proceeds - position.amount * position.entryPrice;
-  const pnlPercent = ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
+  const pnlPercent =
+    ((currentPrice - position.entryPrice) / position.entryPrice) * 100;
 
   const trade: Trade = {
     id: uuid(),
@@ -140,7 +154,16 @@ export async function closePosition(): Promise<void> {
   gb._botState.position = null;
   gb._botState.trades = [trade, ...gb._botState.trades];
 
-  logTrade({ type: "SELL", pair, price: currentPrice, amount: position.amount, total: proceeds, pnl, pnlPercent, reasoning: "Manual close by user" });
+  logTrade({
+    type: "SELL",
+    pair,
+    price: currentPrice,
+    amount: position.amount,
+    total: proceeds,
+    pnl,
+    pnlPercent,
+    reasoning: "Manual close by user",
+  });
   updateStats();
   gb._botState.lastUpdated = Date.now();
 }
@@ -257,7 +280,14 @@ async function executeDecision(
     gb._botState.balance -= positionSize;
     gb._botState.trades = [trade, ...gb._botState.trades];
 
-    logTrade({ type: "BUY", pair, price: currentPrice, amount, total: positionSize, reasoning: analysis.reasoning });
+    logTrade({
+      type: "BUY",
+      pair,
+      price: currentPrice,
+      amount,
+      total: positionSize,
+      reasoning: analysis.reasoning,
+    });
   }
 
   // SELL — закрываем позицию если она есть
@@ -286,7 +316,16 @@ async function executeDecision(
     gb._botState.position = null;
     gb._botState.trades = [trade, ...gb._botState.trades];
 
-    logTrade({ type: "SELL", pair, price: currentPrice, amount, total: proceeds, pnl, pnlPercent, reasoning: analysis.reasoning });
+    logTrade({
+      type: "SELL",
+      pair,
+      price: currentPrice,
+      amount,
+      total: proceeds,
+      pnl,
+      pnlPercent,
+      reasoning: analysis.reasoning,
+    });
   }
 
   // HOLD — ничего не делаем, просто логируем решение

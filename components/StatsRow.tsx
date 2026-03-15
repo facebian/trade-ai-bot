@@ -87,7 +87,7 @@ export function StatsRow({ botState, marketData, rates }: StatsRowProps) {
       />
       <StatCard
         icon={<IconCurrencyBitcoin size={18} />}
-        label='BTC / USDC'
+        label='SOL / USDC'
         value={
           marketData
             ? `$${marketData.price.toLocaleString("en-US", { minimumFractionDigits: 0 })}`

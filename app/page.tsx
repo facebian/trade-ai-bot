@@ -6,10 +6,11 @@ import { StatsRow } from "@/components/StatsRow";
 import { PriceChart } from "@/components/PriceChart";
 import { AIPanel } from "@/components/AIPanel";
 import { TradeHistory } from "@/components/TradeHistory";
-import { IconActivity } from "@tabler/icons-react";
+import { IconActivity, IconSettings } from "@tabler/icons-react";
 import { TradingPair } from "@/lib/types";
 import { useCurrencyRates } from "@/hooks/useCurrencyRates";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 export default function Home() {
   const { botState, loading, actionPending, startBot, stopBot, closePosition } =
@@ -67,6 +68,13 @@ export default function Home() {
             <p className='text-[11px] text-muted-foreground font-mono hidden sm:block'>
               Updated {lastUpdated}
             </p>
+            <Link
+              href="/settings"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Settings"
+            >
+              <IconSettings size={16} />
+            </Link>
           </div>
         </div>
       </header>

@@ -18,41 +18,41 @@ function formatTime(ts: number) {
 
 export function TradeHistory({ trades }: TradeHistoryProps) {
   return (
-    <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-sm">Trade History</h2>
-        <span className="text-xs text-muted-foreground font-mono">
+    <div className='rounded-xl border border-border bg-card p-5 flex flex-col gap-4'>
+      <div className='flex items-center justify-between'>
+        <h2 className='font-semibold text-sm'>Trade History</h2>
+        <span className='text-xs text-muted-foreground font-mono'>
           {trades.length} total
         </span>
       </div>
 
       {trades.length === 0 ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">
+        <div className='py-8 text-center text-sm text-muted-foreground'>
           No trades yet
         </div>
       ) : (
-        <div className="overflow-auto">
-          <table className="w-full text-xs">
+        <div className='overflow-auto'>
+          <table className='w-full text-xs'>
             <thead>
-              <tr className="text-muted-foreground border-b border-border">
-                <th className="text-left pb-2.5 font-medium uppercase tracking-wider text-[11px]">
+              <tr className='text-muted-foreground border-b border-border'>
+                <th className='text-left pb-2.5 font-medium uppercase tracking-wider text-[11px]'>
                   Type
                 </th>
-                <th className="text-right pb-2.5 font-medium uppercase tracking-wider text-[11px]">
+                <th className='text-right pb-2.5 font-medium uppercase tracking-wider text-[11px]'>
                   Price
                 </th>
-                <th className="text-right pb-2.5 font-medium uppercase tracking-wider text-[11px]">
+                <th className='text-right pb-2.5 font-medium uppercase tracking-wider text-[11px]'>
                   Total
                 </th>
-                <th className="text-right pb-2.5 font-medium uppercase tracking-wider text-[11px]">
+                <th className='text-right pb-2.5 font-medium uppercase tracking-wider text-[11px]'>
                   P&L
                 </th>
-                <th className="text-right pb-2.5 font-medium uppercase tracking-wider text-[11px] hidden sm:table-cell">
+                <th className='text-right pb-2.5 font-medium uppercase tracking-wider text-[11px] hidden sm:table-cell'>
                   Time
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className='divide-y divide-border'>
               {trades.slice(0, 20).map((trade) => {
                 const isBuy = trade.type === "BUY";
                 const hasPnl = trade.pnl !== null;
@@ -61,9 +61,9 @@ export function TradeHistory({ trades }: TradeHistoryProps) {
                 return (
                   <tr
                     key={trade.id}
-                    className="hover:bg-muted/40 transition-colors"
+                    className='hover:bg-muted/40 transition-colors'
                   >
-                    <td className="py-2.5">
+                    <td className='py-2.5'>
                       <span
                         className={cn(
                           "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-bold font-mono",
@@ -81,11 +81,11 @@ export function TradeHistory({ trades }: TradeHistoryProps) {
                       </span>
                     </td>
 
-                    <td className="py-2.5 text-right font-mono">
-                      ${trade.price.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    <td className='py-2.5 text-right font-mono'>
+                      ${trade.price.toLocaleString("en-US")}
                     </td>
 
-                    <td className="py-2.5 text-right font-mono">
+                    <td className='py-2.5 text-right font-mono'>
                       ${trade.total.toFixed(2)}
                     </td>
 
@@ -100,11 +100,11 @@ export function TradeHistory({ trades }: TradeHistoryProps) {
                       )}
                     >
                       {hasPnl
-                        ? `${pnlPositive ? "+" : ""}$${trade.pnl!.toFixed(2)}`
+                        ? `${pnlPositive ? "+" : ""}$${trade.pnl}`
                         : "open"}
                     </td>
 
-                    <td className="py-2.5 text-right text-muted-foreground hidden sm:table-cell">
+                    <td className='py-2.5 text-right text-muted-foreground hidden sm:table-cell'>
                       {formatTime(trade.timestamp)}
                     </td>
                   </tr>

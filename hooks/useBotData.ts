@@ -20,9 +20,6 @@ export function useBotData() {
 
       const next: BotState = await res.json();
 
-      console.log('next : >>>', next);
-      
-
       if (!initialized.current) {
         // First load — seed known IDs, no toasts
         next.trades.forEach((t: Trade) => knownTradeIds.current.add(t.id));
