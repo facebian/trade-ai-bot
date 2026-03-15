@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@supabase/supabase-js": "^2.99.1",
     "@tabler/icons-react": "^3.40.0",
     "ccxt": "^4.5.43",
     "class-variance-authority": "^0.7.1",
