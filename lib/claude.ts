@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ClaudeRequest, ClaudeAnalysis } from "./types";
+import { logClaude } from "./logger";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -53,11 +54,13 @@ const SYSTEM_PROMPT = `Ты — опытный криптовалютный тр
 export async function analyzeMarket(
   request: ClaudeRequest,
 ): Promise<ClaudeAnalysis> {
+  const prompt = buildPrompt(request);
+
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: process.env.BOT_REQUEST_CLAUDE_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 800,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: buildPrompt(request) }],
+    messages: [{ role: "user", content: prompt }],
   });
 
   const content = message.content[0];
@@ -65,10 +68,21 @@ export async function analyzeMarket(
     throw new Error("Unexpected response type from Claude");
 
   try {
-    // Убираем markdown блоки на случай если Claude их добавил
-    const clean = content.text.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean) as ClaudeAnalysis;
+    // Extract first JSON object from response (handles markdown blocks + preamble text)
+    const match = content.text.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("No JSON object found");
+    const analysis = JSON.parse(match[0]) as ClaudeAnalysis;
+
+    logClaude({
+      prompt,
+      rawResponse: content.text,
+      decision: analysis.decision,
+      confidence: analysis.confidence,
+    });
+
+    return analysis;
   } catch {
+    console.error("[claude] Failed to parse response:", content.text);
     throw new Error(`Failed to parse Claude response: ${content.text}`);
   }
 }

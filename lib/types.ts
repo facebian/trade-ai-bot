@@ -1,9 +1,9 @@
 // ─── Базовые типы ───────────────────────────────────────────────────────────
 
 export enum TradingPair {
-  BTC_USDT = "BTC/USDT",
-  ETH_USDT = "ETH/USDT",
-  SOL_USDT = "SOL/USDT",
+  BTC_USDT = "BTC/USDC",
+  ETH_USDT = "ETH/USDC",
+  SOL_USDT = "SOL/USDC",
 }
 export type Decision = "BUY" | "SELL" | "HOLD";
 export type BotStatus = "running" | "stopped" | "error";
@@ -131,11 +131,8 @@ export interface Position {
 
 // ─── Полное состояние бота ────────────────────────────────────────────────────
 
-export type NetworkMode = "testnet" | "mainnet";
-
 export interface BotState {
   status: BotStatus;
-  network: NetworkMode; // Текущий режим: testnet.bybit.com или mainnet
   balance: number; // Текущий баланс USDT
   startBalance: number; // Начальный баланс (для подсчёта P&L)
   position: Position | null;

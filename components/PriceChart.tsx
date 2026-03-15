@@ -53,7 +53,7 @@ export function PriceChart({ marketData, candles }: PriceChartProps) {
       <div className="flex items-start justify-between mb-5">
         <div>
           <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-            BTC / USDT · 15m · Last 100 candles
+            BTC / USDC · 15m · Last 100 candles
           </p>
           <p className="text-2xl font-mono font-bold mt-1">
             $

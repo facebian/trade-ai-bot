@@ -20,43 +20,28 @@ import ccxt, { bybit } from "ccxt";
 const g = globalThis as typeof globalThis & {
   _exchange: bybit | null;
   _publicExchange: bybit | null;
-  _currentSandbox: boolean;
 };
 if (g._exchange === undefined) g._exchange = null;
 if (g._publicExchange === undefined) g._publicExchange = null;
-if (g._currentSandbox === undefined)
-  g._currentSandbox = process.env.USE_TESTNET === "true";
 
-// Публичный инстанс — без API-ключей, подходит для любого режима
+// Публичный инстанс — без API-ключей
 function getPublicExchange(): bybit {
   if (!g._publicExchange) {
-    g._publicExchange = new ccxt.bybit({ sandbox: g._currentSandbox });
+    g._publicExchange = new ccxt.bybit({});
   }
   return g._publicExchange;
 }
 
-// Приватный инстанс — с ключами, только для аутентифицированных запросов
+// Приватный инстанс — с ключами (mainnet)
 function getExchange(): bybit {
-  console.log('!g._exchange : >>>', !g._exchange);
-  
   if (!g._exchange) {
-    const apiKey = g._currentSandbox
-      ? process.env.BYBIT_TESTNET_API_KEY
-      : process.env.BYBIT_API_KEY;
-    const secret = g._currentSandbox
-      ? process.env.BYBIT_TESTNET_SECRET_KEY
-      : process.env.BYBIT_SECRET_KEY;
-    g._exchange = new ccxt.bybit({ apiKey, secret, sandbox: g._currentSandbox, options: { defaultType: "unified" } });
+    g._exchange = new ccxt.bybit({
+      apiKey: process.env.BYBIT_API_KEY,
+      secret: process.env.BYBIT_SECRET_KEY,
+      options: { defaultType: "unified" },
+    });
   }
-
   return g._exchange;
-}
-
-// Сбросить оба singleton-а и переключить режим — вызывается при смене testnet/mainnet
-export function resetExchange(sandbox: boolean): void {
-  g._exchange = null;
-  g._publicExchange = null;
-  g._currentSandbox = sandbox;
 }
 
 // ─── Рыночные данные ──────────────────────────────────────────────────────────
@@ -93,7 +78,7 @@ export async function getOHLCV(
   limit = 200,
 ): Promise<PricePoint[]> {
   const ex = getPublicExchange();
-  const ohlcv = await ex.fetchOHLCV(symbol, "15m", undefined, limit);
+  const ohlcv = await ex.fetchOHLCV(symbol, "5m", undefined, limit);
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   //@ts-ignore
   return ohlcv.map(([time, , , , close, volume]) => ({
@@ -108,17 +93,24 @@ export async function getOHLCV(
 // Получить свободный баланс USDT
 export async function getBalance(): Promise<number> {
   const ex = getExchange();
-  const balance = await ex.fetchBalance({ type: "unified" });
-  return balance.USDT?.free ?? 0;
+  const balance = await ex.fetchBalance();
+  return balance.USDC?.free ?? 0;
+}
+
+// Получить свободный баланс конкретного токена (например "BTC")
+export async function getTokenBalance(token: string): Promise<number> {
+  const ex = getExchange();
+  const balance = await ex.fetchBalance();
+  return balance[token]?.free ?? 0;
 }
 
 // Купить по рыночной цене на указанную сумму в USDT
-export async function marketBuy(symbol: string, usdtAmount: number) {
+// Возвращает фактически купленное количество (с учётом комиссии)
+export async function marketBuy(symbol: string, usdсAmount: number): Promise<number> {
   const ex = getExchange();
-  const ticker = await ex.fetchTicker(symbol);
-  const price = ticker.last ?? 0;
-  const amount = usdtAmount / price;
-  return await ex.createMarketBuyOrder(symbol, amount);
+  const order = await ex.createMarketBuyOrderWithCost(symbol, usdсAmount);
+  // order.filled — фактически исполненное количество base currency (BTC)
+  return order.filled ?? order.amount ?? 0;
 }
 
 // Продать по рыночной цене указанное количество монет

@@ -11,12 +11,14 @@ import {
   IconTrendingDown,
   IconMinus,
   IconLoader2,
+  IconX,
 } from "@tabler/icons-react";
 
 interface AIPanelProps {
   botState: BotState;
   onStart: () => Promise<void>;
   onStop: () => Promise<void>;
+  onClosePosition: () => Promise<void>;
   actionPending: boolean;
 }
 
@@ -44,33 +46,49 @@ function DecisionBadge({ decision }: { decision: "BUY" | "SELL" | "HOLD" }) {
   );
 }
 
-function PositionCard({ position }: { position: Position }) {
+function PositionCard({
+  position,
+  onClose,
+  actionPending,
+}: {
+  position: Position;
+  onClose: () => Promise<void>;
+  actionPending: boolean;
+}) {
   const pnlPositive = position.pnl >= 0;
   const pnlSign = pnlPositive ? "+" : "";
+  console.log("position : >>", position);
+
   return (
     <div className='rounded-lg border border-trade/30 bg-trade/5 p-3'>
-      <p className='text-[11px] font-bold text-trade mb-2.5 uppercase tracking-wider'>
-        Open Position
-      </p>
+      <div className='flex items-center justify-between mb-2.5'>
+        <p className='text-[11px] font-bold text-trade uppercase tracking-wider'>
+          Open Position
+        </p>
+        <Button
+          size='sm'
+          variant='outline'
+          onClick={onClose}
+          disabled={actionPending}
+          className='h-6 px-2 text-[11px] border-sell/50 text-sell hover:bg-sell/10 hover:text-sell gap-1 shadow-none'
+        >
+          {actionPending ? (
+            <IconLoader2 size={10} className='animate-spin' />
+          ) : (
+            <IconX size={10} />
+          )}
+          Close
+        </Button>
+      </div>
       <div className='grid grid-cols-2 gap-y-1.5 text-xs'>
         <span className='text-muted-foreground'>Pair</span>
         <span className='font-mono font-bold text-right'>{position.pair}</span>
 
         <span className='text-muted-foreground'>Entry price</span>
-        <span className='font-mono text-right'>
-          $
-          {position.entryPrice.toLocaleString("en-US", {
-            maximumFractionDigits: 0,
-          })}
-        </span>
+        <span className='font-mono text-right'>${position.entryPrice}</span>
 
         <span className='text-muted-foreground'>Current price</span>
-        <span className='font-mono text-right'>
-          $
-          {position.currentPrice.toLocaleString("en-US", {
-            maximumFractionDigits: 0,
-          })}
-        </span>
+        <span className='font-mono text-right'>${position.currentPrice}</span>
 
         <span className='text-muted-foreground'>Amount</span>
         <span className='font-mono text-right'>
@@ -173,11 +191,15 @@ export function AIPanel({
   botState,
   onStart,
   onStop,
+  onClosePosition,
   actionPending,
 }: AIPanelProps) {
   const isRunning = botState.status === "running";
   const isError = botState.status === "error";
   const isStopped = botState.status === "stopped";
+
+  console.log("isError : >>", isError);
+  console.log("botState.status : >>", botState);
 
   const statusDotClass = isRunning
     ? "bg-[#00ff88] shadow-[0_0_6px_#00ff88] animate-pulse"
@@ -259,7 +281,13 @@ export function AIPanel({
       )}
 
       {/* Open position */}
-      {botState.position && <PositionCard position={botState.position} />}
+      {botState.position && (
+        <PositionCard
+          position={botState.position}
+          onClose={onClosePosition}
+          actionPending={actionPending}
+        />
+      )}
     </div>
   );
 }
