@@ -16,72 +16,146 @@ import { getCryptoNews } from "./news";
 import { logTrade } from "./logger";
 
 // ─── Состояние бота ───────────────────────────────────────────────────────────
-// Хранится на globalThis, чтобы быть общим для всех модульных инстансов
-// Next.js App Router (каждый route handler получает свой скоуп модуля).
-// В продакшене замени на Redis или PostgreSQL.
+// Хранится на globalThis + персистируется в Supabase (таблица bot_state).
+// globalThis — кеш для текущего инстанса; Supabase — источник правды между инстансами.
+
+const BOT_STATE_ROW_ID = "singleton";
+
+const DEFAULT_BOT_STATE: BotState = {
+  status: "stopped",
+  balance: 0,
+  startBalance: 0,
+  position: null,
+  trades: [],
+  totalPnl: 0,
+  totalPnlPercent: 0,
+  winRate: 0,
+  lastAnalysis: null,
+  lastError: null,
+  lastUpdated: Date.now(),
+};
 
 const gb = globalThis as typeof globalThis & {
   _botState: BotState;
   _botInterval: ReturnType<typeof setInterval> | null;
+  _botStateLoaded: boolean;
+  _analysisCycleRunning: boolean;
 };
 
-if (!gb._botState) {
-  gb._botState = {
-    status: "stopped",
-    balance: 0,
-    startBalance: 0,
-    position: null,
-    trades: [],
-    totalPnl: 0,
-    totalPnlPercent: 0,
-    winRate: 0,
-    lastAnalysis: null,
-    lastError: null,
-    lastUpdated: Date.now(),
-  };
-}
+if (!gb._botState) gb._botState = { ...DEFAULT_BOT_STATE };
 if (gb._botInterval === undefined) gb._botInterval = null;
+if (gb._botStateLoaded === undefined) gb._botStateLoaded = false;
+if (gb._analysisCycleRunning === undefined) gb._analysisCycleRunning = false;
+
+// ─── Supabase persistence ─────────────────────────────────────────────────────
+
+// Загружает state из Supabase при холодном старте инстанса (один раз на инстанс)
+async function ensureStateLoaded(): Promise<void> {
+  if (gb._botStateLoaded) return;
+  gb._botStateLoaded = true; // set early to prevent concurrent loads
+  try {
+    const { data } = await supabase
+      .from("bot_state")
+      .select("*")
+      .eq("id", BOT_STATE_ROW_ID)
+      .single();
+
+    if (data) {
+      gb._botState = {
+        status: data.status,
+        balance: Number(data.balance),
+        startBalance: Number(data.start_balance),
+        position: data.position ?? null,
+        trades: data.trades ?? [],
+        totalPnl: Number(data.total_pnl),
+        totalPnlPercent: Number(data.total_pnl_percent),
+        winRate: Number(data.win_rate),
+        lastAnalysis: data.last_analysis ?? null,
+        lastError: data.last_error ?? null,
+        lastUpdated: Number(data.last_updated),
+      };
+
+      // Cold start: if DB says running but no interval → restart analysis loop
+      if (gb._botState.status === "running" && !gb._botInterval) {
+        const { data: config } = await supabase
+          .from("bot_config")
+          .select("analysis_interval_min")
+          .single();
+        const intervalMs = (config?.analysis_interval_min ?? 5) * 60_000;
+        gb._botInterval = setInterval(runAnalysisCycle, intervalMs);
+      }
+    }
+  } catch (error) {
+    console.error("[ensureStateLoaded]", error);
+    // Keep default state on error
+  }
+}
+
+// Сохраняет текущий state в Supabase (best-effort, не бросает)
+async function persistState(): Promise<void> {
+  try {
+    await supabase.from("bot_state").upsert({
+      id: BOT_STATE_ROW_ID,
+      status: gb._botState.status,
+      balance: gb._botState.balance,
+      start_balance: gb._botState.startBalance,
+      position: gb._botState.position,
+      trades: gb._botState.trades,
+      total_pnl: gb._botState.totalPnl,
+      total_pnl_percent: gb._botState.totalPnlPercent,
+      win_rate: gb._botState.winRate,
+      last_analysis: gb._botState.lastAnalysis,
+      last_error: gb._botState.lastError,
+      last_updated: gb._botState.lastUpdated,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[persistState]", error);
+  }
+}
 
 // ─── Публичные функции управления ────────────────────────────────────────────
 
-// Получить текущее состояние бота (используется в API роутах)
-export function getBotState(): BotState {
+// Получить текущее состояние бота
+export async function getBotState(): Promise<BotState> {
+  await ensureStateLoaded();
   return { ...gb._botState };
 }
 
 // Синхронизировать баланс с биржей — вызывается из /api/bot/status каждые 5с
-// Работает только когда бот остановлен, чтобы не дублировать запросы во время работы
 export async function syncBalance(): Promise<void> {
+  await ensureStateLoaded();
   if (gb._botState.status === "running") return;
   try {
     const balance = await getBalance();
-
     gb._botState = { ...gb._botState, balance, lastError: null };
+    await persistState();
   } catch (error) {
     console.error("[syncBalance]", error);
     gb._botState = {
       ...gb._botState,
       lastError: `Balance fetch failed: ${String(error)}`,
     };
+    await persistState();
   }
 }
 
-// Запустить бота — получаем баланс и запускаем цикл анализа
+// Запустить бота
 export async function startBot(): Promise<void> {
+  await ensureStateLoaded();
   if (gb._botState.status === "running") return;
 
   let balance: number;
   try {
     balance = await getBalance();
   } catch (error) {
-    console.log('error : >>>', error);
-    
     gb._botState = {
       ...gb._botState,
       status: "error",
       lastError: `Failed to fetch balance: ${String(error)}`,
       lastUpdated: Date.now(),
     };
+    await persistState();
     throw error;
   }
 
@@ -93,16 +167,14 @@ export async function startBot(): Promise<void> {
     lastError: null,
     lastUpdated: Date.now(),
   };
-
-  const ANALYSIS_INTERVAL_MIN = 5;
+  await persistState();
 
   // Читаем интервал анализа из конфига БД, fallback — 5 минут
   const { data: config } = await supabase
     .from("bot_config")
     .select("analysis_interval_min")
     .single();
-  const intervalMs =
-    (config?.analysis_interval_min ?? ANALYSIS_INTERVAL_MIN) * 60_000;
+  const intervalMs = (config?.analysis_interval_min ?? 5) * 60_000;
 
   // Первый анализ сразу, затем по интервалу из конфига
   await runAnalysisCycle();
@@ -110,7 +182,7 @@ export async function startBot(): Promise<void> {
 }
 
 // Остановить бота
-export function stopBot(): void {
+export async function stopBot(): Promise<void> {
   if (gb._botInterval) {
     clearInterval(gb._botInterval);
     gb._botInterval = null;
@@ -120,6 +192,7 @@ export function stopBot(): void {
     status: "stopped",
     lastUpdated: Date.now(),
   };
+  await persistState();
 }
 
 // Принудительно закрыть текущую позицию по рыночной цене
@@ -128,7 +201,7 @@ export async function closePosition(): Promise<void> {
   if (!position) return;
 
   const pair = position.pair as TradingPair;
-  const baseToken = pair.split("/")[0]; // "BTC" из "BTC/USDC"
+  const baseToken = pair.split("/")[0];
   const actualAmount = await getTokenBalance(baseToken);
   const sellAmount = actualAmount > 0 ? actualAmount : position.amount;
   await marketSell(pair, sellAmount);
@@ -168,17 +241,28 @@ export async function closePosition(): Promise<void> {
   });
   updateStats();
   gb._botState.lastUpdated = Date.now();
+  await persistState();
 }
 
 // ─── Основной цикл анализа ────────────────────────────────────────────────────
-// Вызывается каждые 30 секунд: собирает данные → спрашивает Claude → исполняет
+// Вызывается по setInterval (локально) или Vercel Cron (продакшн)
 
-async function runAnalysisCycle(): Promise<void> {
-  const pair = (process.env.TRADING_PAIR ||
-    TradingPair.BTC_USDT) as TradingPair;
+export async function runAnalysisCycle(): Promise<void> {
+  // Предотвращаем одновременные запуски (например, cron + setInterval)
+  if (gb._analysisCycleRunning) return;
+  gb._analysisCycleRunning = true;
+
+  // Убеждаемся что state загружен (важно для cron, который всегда cold start)
+  await ensureStateLoaded();
+
+  if (gb._botState.status !== "running") {
+    gb._analysisCycleRunning = false;
+    return;
+  }
+
+  const pair = (process.env.TRADING_PAIR || TradingPair.BTC_USDT) as TradingPair;
 
   try {
-    // 1. Собираем все данные параллельно для скорости
     const [marketData, candles, sentiment, news] = await Promise.all([
       getMarketData(pair),
       getOHLCV(pair, 200),
@@ -186,10 +270,8 @@ async function runAnalysisCycle(): Promise<void> {
       getCryptoNews("BTC"),
     ]);
 
-    // 2. Считаем технические индикаторы
     const indicators = calculateIndicators(candles);
 
-    // 3. Обновляем P&L открытой позиции по текущей цене
     if (gb._botState.position) {
       const pnl =
         (marketData.price - gb._botState.position.entryPrice) *
@@ -206,7 +288,6 @@ async function runAnalysisCycle(): Promise<void> {
       };
     }
 
-    // 4. Отправляем все данные в Claude — он принимает решение
     const analysis = await analyzeMarket({
       marketData,
       indicators,
@@ -220,19 +301,21 @@ async function runAnalysisCycle(): Promise<void> {
 
     gb._botState.lastAnalysis = analysis;
 
-    // 5. Исполняем решение Claude на бирже
     await executeDecision(analysis, marketData.price, pair);
 
-    // 6. Пересчитываем статистику
     updateStats();
 
     gb._botState.lastError = null;
     gb._botState.lastUpdated = Date.now();
+    await persistState();
   } catch (error) {
     console.error("Bot cycle error:", error);
     gb._botState.status = "error";
     gb._botState.lastError = String(error);
     gb._botState.lastUpdated = Date.now();
+    await persistState();
+  } finally {
+    gb._analysisCycleRunning = false;
   }
 }
 
@@ -243,15 +326,13 @@ async function executeDecision(
   currentPrice: number,
   pair: TradingPair,
 ): Promise<void> {
-  const positionSize = Number(process.env.POSITION_SIZE) || 5; // USDT
+  const positionSize = Number(process.env.POSITION_SIZE) || 5;
 
-  // BUY — открываем позицию если нет активной и хватает баланса
   if (
     analysis.decision === "BUY" &&
     !gb._botState.position &&
     gb._botState.balance >= positionSize
   ) {
-    // Используем фактически купленное количество из ответа биржи (с учётом комиссии)
     const amount = await marketBuy(pair, positionSize);
 
     const trade: Trade = {
@@ -261,7 +342,7 @@ async function executeDecision(
       price: currentPrice,
       amount,
       total: positionSize,
-      pnl: null, // P&L будет известен только после продажи
+      pnl: null,
       pnlPercent: null,
       reasoning: analysis.reasoning,
       timestamp: Date.now(),
@@ -290,10 +371,7 @@ async function executeDecision(
       total: positionSize,
       reasoning: analysis.reasoning,
     });
-  }
-
-  // SELL — закрываем позицию если она есть
-  else if (analysis.decision === "SELL" && gb._botState.position) {
+  } else if (analysis.decision === "SELL" && gb._botState.position) {
     const { amount, entryPrice } = gb._botState.position;
     await marketSell(pair, amount);
 
@@ -329,14 +407,11 @@ async function executeDecision(
       reasoning: analysis.reasoning,
     });
   }
-
-  // HOLD — ничего не делаем, просто логируем решение
 }
 
 // ─── Подсчёт статистики ───────────────────────────────────────────────────────
 
 function updateStats(): void {
-  // Общая стоимость = баланс + стоимость открытой позиции
   const totalValue =
     gb._botState.balance +
     (gb._botState.position
@@ -349,7 +424,6 @@ function updateStats(): void {
       ? (gb._botState.totalPnl / gb._botState.startBalance) * 100
       : 0;
 
-  // Win rate — считаем только по закрытым сделкам SELL
   const closedTrades = gb._botState.trades.filter(
     (t: Trade) => t.type === "SELL" && t.pnl !== null,
   );

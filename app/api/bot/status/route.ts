@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await syncBalance();
-    return NextResponse.json(getBotState());
+    return NextResponse.json(await getBotState());
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }

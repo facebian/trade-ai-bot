@@ -10,7 +10,7 @@ export async function POST(_req: Request) {
   }
   try {
     await closePosition();
-    return NextResponse.json(getBotState());
+    return NextResponse.json(await getBotState());
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
