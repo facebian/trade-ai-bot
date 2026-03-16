@@ -24,9 +24,6 @@ export function useDzengiPing() {
     },
   );
 
-  console.log('data : >>>', data);
-  
-
   return {
     ping: data ?? null,
     pingLoading: isLoading,

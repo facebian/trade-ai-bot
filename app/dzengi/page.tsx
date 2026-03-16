@@ -1,7 +1,10 @@
 import { IconBuildingBank } from "@tabler/icons-react";
+import { fetchDzengiAccount } from "@/lib/dzengi";
 import DzengiPage from "./dzengi";
 
-export default function Page() {
+export default async function Page() {
+  const account = await fetchDzengiAccount();
+
   return (
     <div className='min-h-screen bg-zinc-50'>
       {/* Header */}
@@ -16,8 +19,7 @@ export default function Page() {
       </header>
 
       <main className='max-w-7xl mx-auto p-4 md:p-6 space-y-4'>
-        {/* Placeholder */}
-        <DzengiPage />
+        <DzengiPage account={account} />
       </main>
     </div>
   );
