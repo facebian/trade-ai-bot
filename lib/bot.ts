@@ -74,6 +74,8 @@ export async function startBot(): Promise<void> {
   try {
     balance = await getBalance();
   } catch (error) {
+    console.log('error : >>>', error);
+    
     gb._botState = {
       ...gb._botState,
       status: "error",
