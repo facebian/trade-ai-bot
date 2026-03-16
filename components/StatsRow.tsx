@@ -72,6 +72,8 @@ export function StatsRow({ botState, marketData, rates }: StatsRowProps) {
   const balanceEur = rates ? botState.balance * rates.EUR : null;
   const balancePln = rates ? botState.balance * rates.PLN : null;
 
+  console.log("botState : >>", botState);
+
   return (
     <div className='grid grid-cols-2 lg:grid-cols-4 gap-3'>
       <StatCard

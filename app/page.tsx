@@ -2,6 +2,7 @@
 
 import { useBotData } from "@/hooks/useBotData";
 import { usePriceData } from "@/hooks/usePriceData";
+import { useConfig } from "@/hooks/useConfig";
 import { StatsRow } from "@/components/StatsRow";
 import { PriceChart } from "@/components/PriceChart";
 import { AIPanel } from "@/components/AIPanel";
@@ -11,12 +12,27 @@ import { TradingPair } from "@/lib/types";
 import { useCurrencyRates } from "@/hooks/useCurrencyRates";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useState, useEffect } from "react";
+
+function formatMs(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m > 0 ? `${m}m ${sec.toString().padStart(2, "0")}s` : `${s}s`;
+}
 
 export default function Home() {
   const { botState, loading, actionPending, startBot, stopBot, closePosition } =
     useBotData();
   const priceData = usePriceData();
   const rates = useCurrencyRates();
+  const { config } = useConfig();
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   if (loading) {
     return (
@@ -36,10 +52,15 @@ export default function Home() {
     );
   }
 
-  const lastUpdated = new Date(botState.lastUpdated).toLocaleTimeString(
-    "en-US",
-    { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false },
-  );
+  const intervalMs = (config?.analysis_interval_min ?? 5) * 60_000;
+  const elapsed = now - botState.lastUpdated;
+  const remaining = intervalMs - elapsed;
+  const timerLabel =
+    botState.status === "running"
+      ? remaining > 0
+        ? `Next in ${formatMs(remaining)}`
+        : "Analyzing..."
+      : `${formatMs(elapsed)} ago`;
 
   return (
     <div className='min-h-screen bg-zinc-50'>
@@ -66,7 +87,7 @@ export default function Home() {
               )}
             />
             <p className='text-[11px] text-muted-foreground font-mono hidden sm:block'>
-              Updated {lastUpdated}
+              {timerLabel}
             </p>
             <Link
               href="/settings"

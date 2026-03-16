@@ -162,7 +162,11 @@ export interface ClaudeRequest {
 
 export interface PricePoint {
   time: number;
-  price: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  price: number; // alias for close — used by calculateIndicators
   volume?: number;
 }
 

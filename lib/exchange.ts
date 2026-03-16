@@ -84,8 +84,12 @@ export async function getOHLCV(
   const ohlcv = await ex.fetchOHLCV(symbol, "5m", undefined, limit);
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   //@ts-ignore
-  return ohlcv.map(([time, , , , close, volume]) => ({
+  return ohlcv.map(([time, open, high, low, close, volume]) => ({
     time: time as number,
+    open: open as number,
+    high: high as number,
+    low: low as number,
+    close: close as number,
     price: close as number,
     volume: volume as number,
   }));
@@ -93,7 +97,7 @@ export async function getOHLCV(
 
 // ─── Торговые операции ────────────────────────────────────────────────────────
 
-// Получить свободный баланс USDT
+// Получить свободный баланс USDS
 export async function getBalance(): Promise<number> {
   const ex = getExchange();
   const balance = await ex.fetchBalance({ type: "unified" });
