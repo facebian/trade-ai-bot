@@ -90,9 +90,7 @@ function PositionCard({
         <span className='font-mono text-right'>${position.currentPrice}</span>
 
         <span className='text-muted-foreground'>Amount</span>
-        <span className='font-mono text-right'>
-          {position.amount.toFixed(6)} BTC
-        </span>
+        <span className='font-mono text-right'>{position.amount}</span>
 
         <span className='text-muted-foreground'>P&L</span>
         <span
