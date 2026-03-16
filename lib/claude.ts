@@ -60,30 +60,40 @@ export async function analyzeMarket(
     model: process.env.BOT_REQUEST_CLAUDE_MODEL || "claude-haiku-4-5-20251001",
     max_tokens: 800,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: prompt }],
+    messages: [
+      { role: "user", content: prompt },
+      { role: "assistant", content: "{" },
+    ],
   });
 
   const content = message.content[0];
   if (content.type !== "text")
     throw new Error("Unexpected response type from Claude");
 
+  // Restore the prefilled "{" that was used to force JSON-only output
+  const rawText = "{" + content.text;
+
   try {
-    // Extract first JSON object from response (handles markdown blocks + preamble text)
-    const match = content.text.match(/\{[\s\S]*\}/);
+    // Strip markdown code fences if present, then extract the JSON object
+    let textToParse = rawText;
+    const fenceMatch = textToParse.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) textToParse = fenceMatch[1].trim();
+
+    const match = textToParse.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("No JSON object found");
     const analysis = JSON.parse(match[0]) as ClaudeAnalysis;
 
     logClaude({
       prompt,
-      rawResponse: content.text,
+      rawResponse: rawText,
       decision: analysis.decision,
       confidence: analysis.confidence,
     });
 
     return analysis;
   } catch {
-    console.error("[claude] Failed to parse response:", content.text);
-    throw new Error(`Failed to parse Claude response: ${content.text}`);
+    console.error("[claude] Failed to parse response:", rawText);
+    throw new Error(`Failed to parse Claude response: ${rawText}`);
   }
 }
 
