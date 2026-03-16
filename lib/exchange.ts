@@ -28,6 +28,8 @@ if (g._publicExchange === undefined) g._publicExchange = null;
 function getPublicExchange(): bybit {
   if (!g._publicExchange) {
     g._publicExchange = new ccxt.bybit({});
+    // Bybit's /v5/asset/coin/query-info is geo-blocked by CloudFront on some hosts (e.g. Vercel)
+    g._publicExchange.has["fetchCurrencies"] = false;
   }
   return g._publicExchange;
 }

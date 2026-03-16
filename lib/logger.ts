@@ -2,10 +2,16 @@ import fs from "fs";
 import path from "path";
 
 const LOG_DIR = path.join(process.cwd(), "logs");
+// Vercel and other serverless platforms have a read-only filesystem
+const IS_SERVERLESS = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 
-function ensureLogDir() {
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
+function appendToFile(filename: string, entry: string) {
+  if (IS_SERVERLESS) return; // skip file writes on serverless
+  try {
+    if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+    fs.appendFileSync(path.join(LOG_DIR, filename), entry);
+  } catch {
+    // silently ignore filesystem errors (e.g. read-only fs)
   }
 }
 
@@ -19,7 +25,6 @@ export function logTrade(data: {
   pnlPercent?: number | null;
   reasoning: string;
 }) {
-  ensureLogDir();
   const timestamp = new Date().toISOString();
   const pnlStr =
     data.pnl != null
@@ -33,7 +38,8 @@ export function logTrade(data: {
     `${pnlStr}\n` +
     `  Reasoning: ${data.reasoning}\n\n`;
 
-  fs.appendFileSync(path.join(LOG_DIR, "trades.log"), entry);
+  console.log(entry.trim());
+  appendToFile("trades.log", entry);
 }
 
 export function logClaude(data: {
@@ -42,7 +48,6 @@ export function logClaude(data: {
   decision: string;
   confidence: number;
 }) {
-  ensureLogDir();
   const timestamp = new Date().toISOString();
   const entry =
     `\n${"═".repeat(80)}\n` +
@@ -52,5 +57,6 @@ export function logClaude(data: {
     `${"─".repeat(40)} RESPONSE ${"─".repeat(31)}\n` +
     `${data.rawResponse}\n`;
 
-  fs.appendFileSync(path.join(LOG_DIR, "claude.log"), entry);
+  console.log(`[CLAUDE] decision=${data.decision} confidence=${data.confidence}%`);
+  appendToFile("claude.log", entry);
 }
