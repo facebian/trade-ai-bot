@@ -7,6 +7,8 @@ import { StatsRow } from "@/components/StatsRow";
 import { PriceChart } from "@/components/PriceChart";
 import { AIPanel } from "@/components/AIPanel";
 import { TradeHistory } from "@/components/TradeHistory";
+import { CurrencyTable } from "@/components/CurrencyTable";
+import { CurrencyAnalysis } from "@/components/CurrencyAnalysis";
 import { IconActivity, IconSettings } from "@tabler/icons-react";
 import { TradingPair } from "@/lib/types";
 import { useCurrencyRates } from "@/hooks/useCurrencyRates";
@@ -123,6 +125,10 @@ export default function Home() {
           />
           <TradeHistory trades={botState.trades} />
         </div>
+
+        <CurrencyTable rates={rates} />
+
+        <CurrencyAnalysis />
       </main>
     </div>
   );

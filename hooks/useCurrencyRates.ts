@@ -2,15 +2,16 @@
 
 import { useState, useEffect } from "react";
 
-export interface CurrencyRates {
-  EUR: number; // 1 USD → EUR
-  PLN: number; // 1 USD → PLN
-  USD: number; // 1 USD → USDC (примерно 1, может быть чуть меньше из-за комиссий)
-}
+export type CurrencyRates = Record<string, number>;
 
-// Открытый API без ключа, обновляется раз в сутки
+const CURRENCIES = [
+  "USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD",
+  "CNY", "HKD", "SGD", "NOK", "SEK", "DKK", "PLN", "CZK",
+  "HUF", "TRY", "BRL", "INR",
+];
+
 const RATES_URL = "https://open.er-api.com/v6/latest/USD";
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 час
+const CACHE_TTL_MS = 60 * 60 * 1000;
 
 let cachedRates: CurrencyRates | null = null;
 let cachedAt = 0;
@@ -28,17 +29,19 @@ export function useCurrencyRates(): CurrencyRates | null {
         const res = await fetch(RATES_URL);
         const data = await res.json();
 
-        const r: CurrencyRates = {
-          EUR: data.rates?.EUR ?? 0.92,
-          PLN: data.rates?.PLN ?? 4.0,
-          USD: 1.0, // USDC обычно почти 1 к 1 с USD, но может быть чуть меньше из-за комиссий
-        };
+        const r: CurrencyRates = { USD: 1.0 };
+        for (const code of CURRENCIES) {
+          if (data.rates?.[code] != null) r[code] = data.rates[code];
+        }
+
         cachedRates = r;
         cachedAt = Date.now();
         setRates(r);
       } catch {
-        // Fallback to approximate rates if API is unavailable
-        setRates({ EUR: 0.92, PLN: 4.0, USD: 1.0 });
+        setRates({ USD: 1, EUR: 0.92, GBP: 0.79, JPY: 150.5, CHF: 0.9, CAD: 1.36,
+          AUD: 1.54, NZD: 1.67, CNY: 7.24, HKD: 7.82, SGD: 1.35, NOK: 10.6,
+          SEK: 10.4, DKK: 6.9, PLN: 4.0, CZK: 23.1, HUF: 363, TRY: 32.4,
+          BRL: 5.0, INR: 83.5 });
       }
     };
     load();

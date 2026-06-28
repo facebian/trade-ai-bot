@@ -14,16 +14,14 @@ npm start        # Start production server
 To add shadcn/ui components:
 
 ```bash
-/opt/homebrew/bin/node ./node_modules/.bin/shadcn add <component-name> --yes
+node ./node_modules/.bin/shadcn add <component-name> --yes
 ```
-
-> Note: `npx` is not in PATH in this environment — use the full node path above.
 
 ## Architecture
 
 **Stack:** Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS v4 + shadcn/ui
 
-**Key dependencies:** `@anthropic-ai/sdk`, `ccxt` (Bybit exchange), `recharts` (charts), `uuid`, `@tabler/icons-react`, `swr` (data fetching), `@supabase/supabase-js` (database)
+**Key dependencies:** `@anthropic-ai/sdk`, `ccxt` (Bybit exchange), `recharts` (charts), `lightweight-charts` (TradingView-style candlestick chart), `uuid`, `@tabler/icons-react`, `swr` (data fetching), `@supabase/supabase-js` (database)
 
 **Key conventions:**
 
@@ -31,6 +29,8 @@ To add shadcn/ui components:
 - `lib/utils.ts` — `cn()` helper (clsx + tailwind-merge) for conditional class merging; use everywhere for className composition
 - `@/*` path alias maps to the project root
 - All trading pairs use USDC as quote currency (e.g. `BTC/USDC`, not `BTC/USDT`)
+- `TradingPair` enum keys use `_USDT` suffix (e.g. `TradingPair.BTC_USDT`) but values are `BTC/USDC` — this is a naming inconsistency in the codebase, don't rename the keys
+- Inline comments, Claude system prompt, and `reasoning` field responses are in Russian
 
 **UI system:** shadcn/ui with `radix-nova` style preset, Tabler icons (`@tabler/icons-react`), OKLCH-based CSS variables in `app/globals.css`. Dark mode is CSS-variable-driven.
 
@@ -43,6 +43,18 @@ To add shadcn/ui components:
 | `/` | `app/page.tsx` | Main trading dashboard |
 | `/settings` | `app/settings/page.tsx` | Bot config form (trading pair, position size, Claude model, etc.) |
 
+## UI Components (`components/`)
+
+| Component | Description |
+|-----------|-------------|
+| `StatsRow` | Top stats bar — balance, P&L, win rate, status |
+| `PriceChart` | TradingView-style candlestick chart (`lightweight-charts`) + volume bars |
+| `AIPanel` | Claude's last analysis — decision, reasoning, confidence, key factors |
+| `TradeHistory` | Scrollable list of past trades |
+| `NetworkBadge` | Shows exchange connectivity status |
+
+`components/ui/` — shadcn/ui primitives (button, input, label, select).
+
 ## Bot Architecture
 
 Core modules in `lib/`:
@@ -50,10 +62,11 @@ Core modules in `lib/`:
 | File | Responsibility |
 |------|---------------|
 | `lib/types.ts` | All shared TypeScript types (`BotState`, `Trade`, `Position`, `ClaudeAnalysis`, `Indicators`, etc.) |
-| `lib/bot.ts` | Bot lifecycle (`startBot`, `stopBot`, `closePosition`, `getBotState`); runs analysis cycle every **5 minutes** via `setInterval`; bot state stored on `globalThis` (shared across Next.js route handler modules) |
+| `lib/bot.ts` | Bot lifecycle (`startBot`, `stopBot`, `closePosition`, `getBotState`); runs analysis cycle on interval read from `bot_config.analysis_interval_min` (default 5 min) via `setInterval`; bot state stored on `globalThis` (shared across Next.js route handler modules) |
 | `lib/exchange.ts` | Bybit integration via `ccxt`; public + private exchange instances on `globalThis`; fetches market data, OHLCV candles (`5m` timeframe), account balance; executes market buy/sell orders; calculates all technical indicators (RSI, EMA, MACD, Bollinger Bands, ATR, Stochastic) |
 | `lib/claude.ts` | Sends market data + indicators + sentiment + news to Claude; model configured via `bot_config.claude_model` (default: `claude-haiku-4-5-20251001`); parses JSON trading decision (`BUY`/`SELL`/`HOLD`) |
 | `lib/news.ts` | Fetches crypto news from CryptoCompare API; keyword-based sentiment detection |
+| `lib/logger.ts` | File-based logging; `logTrade()` appends to `logs/trades.log`, `logClaude()` appends to `logs/claude.log` (dir auto-created at runtime) |
 | `lib/supabase.ts` | Supabase client singleton |
 
 **Analysis cycle flow:** `getMarketData` + `getOHLCV` + `getSentimentData` + `getCryptoNews` → `calculateIndicators` → `analyzeMarket` (Claude) → `executeDecision` (buy/sell on Bybit) → `updateStats`
@@ -101,7 +114,7 @@ create table bot_config (
 insert into bot_config default values;
 ```
 
-Config is read via `app/actions/config.ts` (server actions) and `app/api/config/route.ts` (GET endpoint for SWR).
+Config is read via `app/actions/config.ts` (server actions — also defines `BotConfig` type) and `app/api/config/route.ts` (GET endpoint for SWR).
 
 ## Environment Variables
 
@@ -113,11 +126,12 @@ NEXT_PUBLIC_SUPABASE_URL        # Required — Supabase project URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY   # Required — Supabase anon key
 CRYPTOCOMPARE_API_KEY           # Optional — crypto news, up to 100k req/month free
 NEXT_PUBLIC_TRADING_PAIR        # Optional — shown in UI header (e.g. BTC/USDC)
+BOT_REQUEST_CLAUDE_MODEL        # Optional — overrides Claude model in lib/claude.ts (default: claude-haiku-4-5-20251001)
 ```
 
 ## Known TODOs
 
 - `lib/exchange.ts`: `btcDominance`, `marketCapChange24h`, `fundingRate`, `longShortRatio` in `getSentimentData()` return hardcoded values — need CoinGecko and Bybit Funding Rate APIs
 - Bot state is in-memory on `globalThis` — loses data on server restart; should be persisted to Supabase
-- `lib/bot.ts` still reads `TRADING_PAIR` and `POSITION_SIZE` from env vars — should read from `bot_config` table instead
-- `lib/claude.ts` model is hardcoded as fallback — should read from `bot_config.claude_model`
+- `lib/bot.ts` `runAnalysisCycle()` reads `TRADING_PAIR` from env var; `executeDecision()` reads `POSITION_SIZE` from env var — both should read from `bot_config` table instead
+- `lib/claude.ts` model reads from `BOT_REQUEST_CLAUDE_MODEL` env var, not `bot_config.claude_model` — should be unified with DB config
